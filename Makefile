@@ -6,7 +6,7 @@ help:
 
 .PHONY: build
 build:
-	(cd cmd; go build -o readium; mv readium ../)
+	go build -o readium ./cmd
 
 .PHONY: install
 install:

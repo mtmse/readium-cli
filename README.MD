@@ -14,6 +14,7 @@ As an alternative, to install `readium` in `~/go/bin`, run `make install`. Use `
 
 | Command | Description |
 | ------- | ----------- |
+| `generate` | The `generate` command writes `manifest.json` and `positions.json` files for a publication to an output directory. |
 | [`manifest`](./docs/manifest.md) | The `manifest` command can parse a publication and return a [Readium Web Publication Manifest](https://readium.org/webpub-manifest/), which is printed to `stdout`. |
 | [`serve`](./docs/serve.md) | The `serve` command starts an HTTPS server that can serve publications. A log is printed to `stdout`. |
 
@@ -26,6 +27,10 @@ As an alternative, to install `readium` in `~/go/bin`, run `make install`. Use `
 | `package` | Package images or audio files into a Readium Web Publication. | <https://github.com/readium/cli/discussions/2> |
 
 ## Examples
+
+```sh
+readium generate moby-dick.epub --out ./out
+```
 
 ```sh
 readium manifest --infer-a11y=split moby-dick.epub | jq .metadata
