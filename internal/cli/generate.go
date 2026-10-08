@@ -8,8 +8,10 @@ import (
 	"path/filepath"
 
 	"github.com/readium/go-toolkit/pkg/asset"
+	"github.com/readium/go-toolkit/pkg/guidednavigation/converter"
 	"github.com/readium/go-toolkit/pkg/manifest"
 	"github.com/readium/go-toolkit/pkg/mediatype"
+	"github.com/readium/go-toolkit/pkg/parser/epub"
 	"github.com/readium/go-toolkit/pkg/pub"
 	"github.com/readium/go-toolkit/pkg/streamer"
 	"github.com/readium/go-toolkit/pkg/util/url"
@@ -21,7 +23,7 @@ var generateIndentFlag string
 
 var generateCmd = &cobra.Command{
 	Use:   "generate <pub-path>",
-	Short: "Generate manifest.json and positions.json files",
+	Short: "Generate manifest.json, positions.json and guided-navigation.json files",
 	Args: func(cmd *cobra.Command, args []string) error {
 		if len(args) == 0 {
 			return fmt.Errorf("expects a path to the publication")
@@ -55,23 +57,61 @@ func generateFiles(inputPath string, outDir string, indent string) error {
 	if err != nil {
 		return fmt.Errorf("url from filepath: %w", err)
 	}
+	info, err := os.Stat(absIn)
+	if err != nil {
+		return fmt.Errorf("stat input: %w", err)
+	}
+	directoryPositions := &directoryPositionStrategy{ctx: ctx}
 
 	// Match how serve opens the publication: service links enabled.
 	p, err := streamer.New(streamer.Config{
 		AddServiceLinks: true,
+		OnCreatePublication: func(b *pub.Builder) error {
+			if info.IsDir() && b.Manifest.ConformsTo(manifest.ProfileEPUB) {
+				factory := epub.PositionsServiceFactory(directoryPositions)
+				b.ServicesBuilder.Set(pub.PositionsService_Name, &factory)
+			}
+			factory := pub.HTMLGuidedNavigationServiceFactory(converter.WithTextRefLocators())
+			b.ServicesBuilder.Set(pub.GuidedNavigationService_Name, &factory)
+			// Keep the original SMIL alternates for static, ordered conversion.
+			b.ServicesBuilder.Remove(pub.MediaOverlayService_Name)
+			return nil
+		},
 	}).Open(ctx, asset.File(u), "")
 	if err != nil {
 		return fmt.Errorf("open publication: %w", err)
 	}
 	defer p.Close()
 
-	if err := os.MkdirAll(outDir, 0o755); err != nil {
-		return fmt.Errorf("mkdir out: %w", err)
-	}
-
+	// Calculate positions before enriching the shared reading-order links.
+	// Their density must not depend on guided navigation or added metadata.
 	positionsBytes, err := materializePositionList(ctx, p)
 	if err != nil {
 		return fmt.Errorf("positions: %w", err)
+	}
+	if directoryPositions.err != nil {
+		return fmt.Errorf("positions: %w", directoryPositions.err)
+	}
+
+	guide, err := materializeGuidedNavigation(ctx, p)
+	if err != nil {
+		return fmt.Errorf("guided navigation: %w", err)
+	}
+	var guideBytes []byte
+	if indent == "" {
+		guideBytes, err = json.Marshal(guide)
+	} else {
+		guideBytes, err = json.MarshalIndent(guide, "", indent)
+	}
+	if err != nil {
+		return fmt.Errorf("marshal guided navigation: %w", err)
+	}
+
+	if err := os.MkdirAll(outDir, 0o755); err != nil {
+		return fmt.Errorf("mkdir out: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(outDir, guidedNavigationFilename), guideBytes, 0o644); err != nil {
+		return fmt.Errorf("write guided-navigation.json: %w", err)
 	}
 
 	positionsPath := filepath.Join(outDir, "positions.json")
