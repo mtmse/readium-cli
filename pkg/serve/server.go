@@ -9,6 +9,7 @@ import (
 	"github.com/gorilla/mux"
 	"github.com/readium/cli/pkg/serve/auth"
 	"github.com/readium/cli/pkg/serve/cache"
+	"github.com/readium/cli/pkg/serve/session"
 	"github.com/readium/go-toolkit/pkg/archive"
 	"github.com/readium/go-toolkit/pkg/streamer"
 	"github.com/readium/go-toolkit/pkg/util/url"
@@ -42,10 +43,18 @@ func (r Remote) AcceptsScheme(scheme url.Scheme) bool {
 }
 
 type ServerConfig struct {
-	Debug             bool
-	JSONIndent        string
-	InferA11yMetadata streamer.InferA11yMetadata
-	Auth              auth.AuthProvider
+	Debug                 bool
+	JSONIndent            string
+	InferA11yMetadata     streamer.InferA11yMetadata
+	Auth                  auth.AuthProvider
+	ReadingSessionFetcher session.Fetcher
+	CORSAllowedOrigins    []string
+
+	// Audio parsing
+	AudioEmbeddedChapters      bool   // Whether to extract chapters embedded in audio files
+	AudioParsingConcurrency    uint8  // Number of audio files to probe concurrently (0 = library default)
+	AudioParsingCacheBlockSize uint32 // Read-cache block size in bytes while probing audio (0 = library default)
+	AudioParsingCacheRetain    bool   // Keep probe-cache blocks of remote audiobooks in memory to serve their byte ranges without remote requests
 }
 
 type Server struct {
